@@ -76,7 +76,20 @@ fi
 # Build the package
 echo "🔨 Building catkin workspace..."
 cd /code/catkin_ws
-catkin_make --pkg $PACKAGE_NAME
+
+# Check if workspace was built with catkin build vs catkin_make
+if [ -d "build/.catkin_tools" ]; then
+    echo "   ℹ️  Workspace was built with catkin build, cleaning and rebuilding..."
+    rm -rf build devel
+    catkin_make
+else
+    # Try catkin_make, fall back to full rebuild if needed
+    if ! catkin_make --pkg $PACKAGE_NAME 2>/dev/null; then
+        echo "   ℹ️  Rebuilding workspace from scratch..."
+        rm -rf build devel
+        catkin_make
+    fi
+fi
 
 # Source the workspace
 source /code/catkin_ws/devel/setup.bash
