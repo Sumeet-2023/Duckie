@@ -63,7 +63,7 @@ class ColorObjectDetectionNode:
         )
         
         # Subscribers
-        self.image_sub = rospy.Subscribe(
+        self.image_sub = rospy.Subscriber(
             f'/{self.vehicle_name}/camera_node/image/compressed',
             CompressedImage,
             self.image_callback

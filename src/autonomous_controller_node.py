@@ -58,13 +58,13 @@ class AutonomousControllerNode:
         )
         
         # Subscribers
-        self.object_detection_sub = rospy.Subscribe(
+        self.object_detection_sub = rospy.Subscriber(
             f'/{self.vehicle_name}/object_detection/detection_data',
             Float32MultiArray,
             self.object_detection_callback
         )
         
-        self.obstacle_detection_sub = rospy.Subscribe(
+        self.obstacle_detection_sub = rospy.Subscriber(
             f'/{self.vehicle_name}/obstacle_detection/obstacle_detected',
             Bool,
             self.obstacle_detection_callback
