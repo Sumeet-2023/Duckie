@@ -282,11 +282,14 @@ class ColorObjectDetectionNode:
                 detection_data_msg = Float32MultiArray()
                 if detections:
                     best_detection = max(detections, key=lambda d: d['area'])  # Largest object
+                    # Send exactly 6 values as expected by autonomous_controller
                     detection_data_msg.data = [
-                        float(best_detection['center_x']),
-                        float(best_detection['center_y']),
-                        float(best_detection['area']),
-                        float(best_detection['confidence'])
+                        float(best_detection['center_x']),      # 0: x coordinate
+                        float(best_detection['center_y']),      # 1: y coordinate
+                        float(best_detection['area']),          # 2: area
+                        float(best_detection['confidence']),    # 3: confidence
+                        float(best_detection['bounding_box'][2]), # 4: width
+                        float(best_detection['bounding_box'][3])  # 5: height
                     ]
                     self.detection_data_pub.publish(detection_data_msg)
                     

@@ -2,240 +2,225 @@
 
 import rospy
 import numpy as np
+from std_msgs.msg import Float32MultiArray, String
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Bool, Float32, Float32MultiArray, String
-from duckietown_msgs.msg import Twist2DStamped, WheelsCmdStamped
-import json
-import traceback
-import sys
+from sensor_msgs.msg import Range
+import math
 
 class AutonomousControllerNode:
     def __init__(self):
-        rospy.init_node('autonomous_controller_node')
+        rospy.init_node('autonomous_controller_node', anonymous=True)
         
-        # Parameters
-        self.vehicle_name = rospy.get_param('~vehicle_name', 'duckiebot')
-        self.max_linear_speed = rospy.get_param('~max_linear_speed', 0.4)
-        self.max_angular_speed = rospy.get_param('~max_angular_speed', 2.0)
-        self.target_distance = rospy.get_param('~target_distance', 1.0)  # meters
-        self.obstacle_avoidance_distance = rospy.get_param('~obstacle_avoidance_distance', 0.5)
+        # Get parameters
+        self.vehicle_name = rospy.get_param('~vehicle_name', 'pinkduckie')
         
-        # Control gains
+        # Control parameters
         self.kp_linear = rospy.get_param('~kp_linear', 0.5)
-        self.kp_angular = rospy.get_param('~kp_angular', 2.0)
         self.ki_linear = rospy.get_param('~ki_linear', 0.1)
+        self.kp_angular = rospy.get_param('~kp_angular', 2.0)
         self.ki_angular = rospy.get_param('~ki_angular', 0.0)
         
-        # State variables
-        self.object_detected = False
-        self.obstacle_detected = False
-        self.object_center_x = 0
-        self.object_relative_x = 0
-        self.object_distance = 5.0
-        self.obstacle_distance = 5.0
+        self.max_linear_speed = rospy.get_param('~max_linear_speed', 0.4)
+        self.max_angular_speed = rospy.get_param('~max_angular_speed', 2.0)
         
-        # Control state
+        self.target_distance = rospy.get_param('~target_distance', 1.0)
+        self.obstacle_avoidance_distance = rospy.get_param('~obstacle_avoidance_distance', 0.5)
+        
+        # State management
         self.state = "SEARCHING"  # SEARCHING, FOLLOWING, AVOIDING
-        self.last_object_time = rospy.Time.now()
-        self.object_timeout = 3.0  # seconds
+        self.last_detection = None
+        self.last_detection_time = rospy.Time.now()
+        self.detection_timeout = 2.0  # seconds
         
-        # PID variables
+        # Control variables
         self.linear_error_integral = 0.0
         self.angular_error_integral = 0.0
-        self.last_time = rospy.Time.now()
+        
+        # Image parameters (typical camera resolution)
+        self.image_width = 640
+        self.image_height = 480
+        self.image_center_x = self.image_width // 2
+        
+        # Obstacle detection
+        self.obstacle_detected = False
+        self.min_obstacle_distance = float('inf')
         
         # Publishers
-        self.cmd_pub = rospy.Publisher(
-            f'/{self.vehicle_name}/car_cmd_switch_node/cmd',
-            Twist2DStamped,
-            queue_size=1
-        )
-        
-        self.state_pub = rospy.Publisher(
-            f'/{self.vehicle_name}/autonomous_controller/state',
-            String,
+        self.cmd_vel_pub = rospy.Publisher(
+            f'/{self.vehicle_name}/wheels_driver_node/wheels_cmd',
+            Twist,
             queue_size=1
         )
         
         # Subscribers
-        self.object_detection_sub = rospy.Subscriber(
+        self.detection_sub = rospy.Subscriber(
             f'/{self.vehicle_name}/object_detection/detection_data',
             Float32MultiArray,
-            self.object_detection_callback
+            self.detection_callback
         )
         
-        self.obstacle_detection_sub = rospy.Subscriber(
-            f'/{self.vehicle_name}/obstacle_detection/obstacle_detected',
-            Bool,
-            self.obstacle_detection_callback
-        )
-        
-        self.obstacle_distance_sub = rospy.Subscriber(
-            f'/{self.vehicle_name}/obstacle_detection/distance',
-            Float32,
-            self.obstacle_distance_callback
+        self.obstacle_sub = rospy.Subscriber(
+            f'/{self.vehicle_name}/obstacle_detection/obstacle_distance',
+            Float32MultiArray,
+            self.obstacle_callback
         )
         
         # Control timer
-        self.control_timer = rospy.Timer(rospy.Duration(0.1), self.control_callback)
+        self.control_timer = rospy.Timer(rospy.Duration(0.1), self.control_loop)
         
         rospy.loginfo("Autonomous Controller Node initialized")
-    
-    def object_detection_callback(self, msg):
+
+    def detection_callback(self, msg):
+        """Handle detection data from color detection node"""
+        # Enhanced validation - expect exactly 6 elements: [x, y, area, confidence, width, height]
+        if len(msg.data) != 6:
+            rospy.logwarn(f"Invalid object detection data length: {len(msg.data)}, expected 6")
+            return
+
         try:
-            if len(msg.data) >= 6:
-                self.object_center_x = msg.data[0]
-                center_y = msg.data[1]
-                self.object_relative_x = msg.data[2]
-                relative_y = msg.data[3]
-                area = msg.data[4]
-                self.object_distance = msg.data[5]
+            center_x = msg.data[0]
+            center_y = msg.data[1] 
+            area = msg.data[2]
+            confidence = msg.data[3]
+            width = msg.data[4]
+            height = msg.data[5]
+            
+            # Apply thresholds for valid detection
+            if area > 100 and confidence > 0.3:
+                self.last_detection = {
+                    'center_x': center_x,
+                    'center_y': center_y,
+                    'area': area,
+                    'confidence': confidence,
+                    'width': width,
+                    'height': height,
+                    'timestamp': rospy.Time.now()
+                }
                 
-                self.object_detected = True
-                self.last_object_time = rospy.Time.now()
+                self.last_detection_time = rospy.Time.now()
                 
-                rospy.logdebug(f"Object detected: distance={self.object_distance:.2f}m, "
-                             f"relative_x={self.object_relative_x:.2f}")
+                # Calculate control based on detection
+                self.calculate_control()
+                rospy.logdebug(f"Object detected at ({center_x:.1f}, {center_y:.1f}), area: {area:.1f}, confidence: {confidence:.2f}")
             else:
-                rospy.logwarn(f"Invalid object detection data length: {len(msg.data)}, expected 6")
+                rospy.logdebug(f"Detection filtered out - area: {area:.1f}, confidence: {confidence:.2f}")
                 
         except Exception as e:
-            rospy.logerr(f"ERROR in object_detection_callback: {str(e)}")
-            rospy.logerr(f"Data received: {msg.data if hasattr(msg, 'data') else 'No data'}")
-            rospy.logerr(f"Traceback: {traceback.format_exc()}")
-    
-    def obstacle_detection_callback(self, msg):
+            rospy.logerr(f"Error processing detection: {e}")
+
+    def obstacle_callback(self, msg):
+        """Handle obstacle detection data"""
         try:
-            self.obstacle_detected = msg.data
-            
-            if self.obstacle_detected:
-                rospy.logwarn("Obstacle detected by controller")
+            if len(msg.data) > 0:
+                self.min_obstacle_distance = min(msg.data)
+                self.obstacle_detected = self.min_obstacle_distance < self.obstacle_avoidance_distance
                 
+                if self.obstacle_detected and self.state == "FOLLOWING":
+                    self.state = "AVOIDING"
+                    rospy.loginfo(f"State: AVOIDING - Obstacle at {self.min_obstacle_distance:.2f}m")
+                    
         except Exception as e:
-            rospy.logerr(f"ERROR in obstacle_detection_callback: {str(e)}")
-            rospy.logerr(f"Message type: {type(msg)}")
-            rospy.logerr(f"Traceback: {traceback.format_exc()}")
-    
-    def obstacle_distance_callback(self, msg):
-        try:
-            self.obstacle_distance = msg.data
+            rospy.logerr(f"Error processing obstacle data: {e}")
+
+    def calculate_control(self):
+        """Calculate control commands based on current detection"""
+        if not self.last_detection:
+            return
             
-        except Exception as e:
-            rospy.logerr(f"ERROR in obstacle_distance_callback: {str(e)}")
-            rospy.logerr(f"Message type: {type(msg)}")
-            rospy.logerr(f"Traceback: {traceback.format_exc()}")
-    
-    def control_callback(self, event):
-        try:
-            current_time = rospy.Time.now()
-            
-            # Check if object detection is stale
-            time_since_object = (current_time - self.last_object_time).to_sec()
-            if time_since_object > self.object_timeout:
-                self.object_detected = False
-            
-            # State machine
-            self.update_state()
-            
-            # Generate control commands based on state
-            cmd = self.generate_control_command()
-            
-            # Publish command
-            self.cmd_pub.publish(cmd)
-            
-            # Publish state
-            self.state_pub.publish(String(data=self.state))
-            
-            self.last_time = current_time
-            
-        except Exception as e:
-            rospy.logerr(f"CRITICAL ERROR in control_callback: {str(e)}")
-            rospy.logerr(f"Traceback: {traceback.format_exc()}")
-            # Publish emergency stop
-            try:
-                emergency_cmd = Twist2DStamped()
-                emergency_cmd.header.stamp = rospy.Time.now()
-                emergency_cmd.v = 0.0
-                emergency_cmd.omega = 0.0
-                self.cmd_pub.publish(emergency_cmd)
-                rospy.logwarn("Emergency stop published due to control error")
-            except:
-                rospy.logerr("Failed to publish emergency stop command!")
-    
-    def update_state(self):
-        if self.obstacle_detected and self.obstacle_distance < self.obstacle_avoidance_distance:
-            self.state = "AVOIDING"
-        elif self.object_detected:
+        # Switch to following state if we have a good detection
+        if self.state == "SEARCHING":
             self.state = "FOLLOWING"
+            rospy.loginfo("State: FOLLOWING - Target acquired")
+
+    def control_loop(self, event):
+        """Main control loop"""
+        current_time = rospy.Time.now()
+        
+        # Check for detection timeout
+        if (current_time - self.last_detection_time).to_sec() > self.detection_timeout:
+            if self.state != "SEARCHING":
+                self.state = "SEARCHING"
+                rospy.loginfo("State: SEARCHING - Lost target")
+                self.last_detection = None
+        
+        # Execute behavior based on current state
+        if self.state == "FOLLOWING" and self.last_detection:
+            self.following_behavior()
+        elif self.state == "AVOIDING":
+            self.avoidance_behavior()
         else:
+            self.search_behavior()
+
+    def following_behavior(self):
+        """Control behavior when following an object"""
+        if not self.last_detection:
+            return
+            
+        center_x = self.last_detection['center_x']
+        area = self.last_detection['area']
+        
+        # Calculate angular error (steering)
+        x_error = center_x - self.image_center_x
+        angular_error = -x_error / (self.image_width / 2)  # Normalize to [-1, 1]
+        
+        self.angular_error_integral += angular_error
+        angular_velocity = (self.kp_angular * angular_error + 
+                          self.ki_angular * self.angular_error_integral)
+        angular_velocity = max(-self.max_angular_speed, 
+                             min(self.max_angular_speed, angular_velocity))
+        
+        # Calculate linear velocity based on object size (area)
+        # Larger area = closer object = slower speed
+        target_area = 5000  # Desired object area for target distance
+        area_error = (target_area - area) / target_area
+        
+        self.linear_error_integral += area_error
+        linear_velocity = (self.kp_linear * area_error + 
+                         self.ki_linear * self.linear_error_integral)
+        linear_velocity = max(-self.max_linear_speed, 
+                            min(self.max_linear_speed, linear_velocity))
+        
+        # Safety check - don't get too close
+        if area > 8000:  # Very close
+            linear_velocity = min(0, linear_velocity)
+        
+        self.publish_velocity(linear_velocity, angular_velocity)
+        
+        rospy.logdebug(f"Following: linear={linear_velocity:.2f}, angular={angular_velocity:.2f}")
+
+    def search_behavior(self):
+        """Control behavior when searching for object"""
+        # Slowly rotate to search for the object
+        linear_velocity = 0.0
+        angular_velocity = 0.3  # Slow rotation
+        
+        self.publish_velocity(linear_velocity, angular_velocity)
+        rospy.loginfo("State: SEARCHING - Looking for target object")
+
+    def avoidance_behavior(self):
+        """Control behavior when avoiding obstacles"""
+        # Simple obstacle avoidance - back up and turn
+        linear_velocity = -0.2
+        angular_velocity = 1.0
+        
+        self.publish_velocity(linear_velocity, angular_velocity)
+        rospy.loginfo("State: AVOIDING - Obstacle detected")
+        
+        # Return to searching after brief avoidance
+        if self.min_obstacle_distance > self.obstacle_avoidance_distance * 1.2:
             self.state = "SEARCHING"
-    
-    def generate_control_command(self):
-        cmd = Twist2DStamped()
-        cmd.header.stamp = rospy.Time.now()
-        
-        dt = (rospy.Time.now() - self.last_time).to_sec()
-        if dt <= 0:
-            dt = 0.1
-        
-        if self.state == "AVOIDING":
-            # Obstacle avoidance behavior
-            cmd.v = 0.0
-            cmd.omega = 1.5  # Turn right to avoid obstacle
-            
-            # Reset PID integrals
-            self.linear_error_integral = 0.0
-            self.angular_error_integral = 0.0
-            
-            rospy.loginfo("State: AVOIDING - Turning away from obstacle")
-            
-        elif self.state == "FOLLOWING":
-            # Object following behavior with PID control
-            
-            # Distance control (linear velocity)
-            distance_error = self.object_distance - self.target_distance
-            self.linear_error_integral += distance_error * dt
-            
-            linear_velocity = (self.kp_linear * distance_error + 
-                             self.ki_linear * self.linear_error_integral)
-            
-            # Steering control (angular velocity)
-            steering_error = -self.object_relative_x  # Negative because we want to turn toward object
-            self.angular_error_integral += steering_error * dt
-            
-            angular_velocity = (self.kp_angular * steering_error + 
-                              self.ki_angular * self.angular_error_integral)
-            
-            # Apply speed limits
-            cmd.v = np.clip(linear_velocity, -self.max_linear_speed, self.max_linear_speed)
-            cmd.omega = np.clip(angular_velocity, -self.max_angular_speed, self.max_angular_speed)
-            
-            # Safety: reduce speed when turning sharply
-            if abs(cmd.omega) > 1.0:
-                cmd.v *= 0.5
-            
-            rospy.loginfo(f"State: FOLLOWING - v={cmd.v:.2f}, ω={cmd.omega:.2f}, "
-                         f"dist_err={distance_error:.2f}, steer_err={steering_error:.2f}")
-            
-        else:  # SEARCHING
-            # Search behavior - slow rotation
-            cmd.v = 0.0
-            cmd.omega = 0.5
-            
-            # Reset PID integrals
-            self.linear_error_integral = 0.0
-            self.angular_error_integral = 0.0
-            
-            rospy.loginfo("State: SEARCHING - Looking for target object")
-        
-        return cmd
-    
-    def run(self):
-        rospy.spin()
+            self.obstacle_detected = False
+
+    def publish_velocity(self, linear_vel, angular_vel):
+        """Publish velocity commands to robot"""
+        twist = Twist()
+        twist.linear.x = linear_vel
+        twist.angular.z = angular_vel
+        self.cmd_vel_pub.publish(twist)
 
 if __name__ == '__main__':
     try:
-        node = AutonomousControllerNode()
-        node.run()
+        controller = AutonomousControllerNode()
+        rospy.spin()
     except rospy.ROSInterruptException:
         pass
