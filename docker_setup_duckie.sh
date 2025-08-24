@@ -52,10 +52,16 @@ if [ -d "$TARGET_DIR" ]; then
     rm -rf "$TARGET_DIR"
 fi
 
-# Create directory and copy files
-mkdir -p "$TARGET_DIR"
-cp -r "$SCRIPT_DIR"/* "$TARGET_DIR/"
-echo "   ✅ Package copied to $TARGET_DIR"
+# Remove any conflicting source directories
+if [ -d "/code/catkin_ws/src/dt-duckiebot-interface/CPS_Duck/Duckie" ] && [ "$SCRIPT_DIR" = "/code/catkin_ws/src/dt-duckiebot-interface/CPS_Duck/Duckie" ]; then
+    echo "   ℹ️  Working directly from source location, creating symlink instead..."
+    ln -sf "$SCRIPT_DIR" "$TARGET_DIR"
+else
+    # Create directory and copy files
+    mkdir -p "$TARGET_DIR"
+    cp -r "$SCRIPT_DIR"/* "$TARGET_DIR/"
+fi
+echo "   ✅ Package set up at $TARGET_DIR"
 
 # Make Python scripts executable
 echo "🔧 Making Python scripts executable..."
@@ -82,13 +88,24 @@ if [ -d "build/.catkin_tools" ]; then
     echo "   ℹ️  Workspace was built with catkin build, cleaning and rebuilding..."
     rm -rf build devel
     catkin_make
-else
+elif [ -f "build/Makefile" ]; then
     # Try catkin_make, fall back to full rebuild if needed
     if ! catkin_make --pkg $PACKAGE_NAME 2>/dev/null; then
         echo "   ℹ️  Rebuilding workspace from scratch..."
         rm -rf build devel
         catkin_make
     fi
+else
+    echo "   ℹ️  Building workspace for first time..."
+    catkin_make
+fi
+
+# Verify build was successful
+if [ -f "devel/setup.bash" ]; then
+    echo "   ✅ Build successful"
+else
+    echo "   ❌ Build failed - check for errors above"
+    exit 1
 fi
 
 # Source the workspace
