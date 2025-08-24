@@ -24,6 +24,189 @@ object_detection:
       lower: [20, 100, 100]
       upper: [30, 255, 255]
 
+# Autonomous Following Configuration
+# Updated with multi-color support and improved noise filtering parameters
+
+detection:
+  # Supported colors: red, blue, green, yellow, orange, purple, cyan, pink
+  supported_colors: ["red", "blue", "green", "yellow", "orange", "purple", "cyan", "pink"]
+  
+  # Minimum area thresholds
+  min_area_base: 50
+  adaptive_min_area_enabled: true
+  max_area_ratio: 0.3  # Maximum area as fraction of image
+  
+  # HSV color ranges for all supported colors
+  color_ranges:
+    red:
+      strict:
+        ranges:
+          - {lower: [0, 120, 120], upper: [8, 255, 255]}
+          - {lower: [165, 120, 120], upper: [180, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [0, 80, 80], upper: [12, 255, 255]}
+          - {lower: [158, 80, 80], upper: [180, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [0, 50, 50], upper: [15, 255, 255]}
+          - {lower: [150, 50, 50], upper: [180, 255, 255]}
+        min_pixels: 50
+    
+    blue:
+      strict:
+        ranges:
+          - {lower: [100, 150, 150], upper: [130, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [90, 100, 100], upper: [130, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [80, 50, 50], upper: [140, 255, 255]}
+        min_pixels: 50
+    
+    green:
+      strict:
+        ranges:
+          - {lower: [40, 120, 120], upper: [80, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [35, 80, 80], upper: [85, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [30, 50, 50], upper: [90, 255, 255]}
+        min_pixels: 50
+    
+    yellow:
+      strict:
+        ranges:
+          - {lower: [20, 150, 150], upper: [30, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [15, 100, 100], upper: [35, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [10, 50, 50], upper: [40, 255, 255]}
+        min_pixels: 50
+    
+    orange:
+      strict:
+        ranges:
+          - {lower: [8, 150, 150], upper: [20, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [5, 100, 100], upper: [25, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [2, 50, 50], upper: [30, 255, 255]}
+        min_pixels: 50
+    
+    purple:
+      strict:
+        ranges:
+          - {lower: [130, 120, 120], upper: [160, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [120, 80, 80], upper: [170, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [110, 50, 50], upper: [180, 255, 255]}
+        min_pixels: 50
+    
+    cyan:
+      strict:
+        ranges:
+          - {lower: [80, 150, 150], upper: [100, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [75, 100, 100], upper: [105, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [70, 50, 50], upper: [110, 255, 255]}
+        min_pixels: 50
+    
+    pink:
+      strict:
+        ranges:
+          - {lower: [160, 80, 180], upper: [180, 255, 255]}
+          - {lower: [0, 80, 180], upper: [10, 255, 255]}
+        min_pixels: 500
+      relaxed:
+        ranges:
+          - {lower: [150, 50, 150], upper: [180, 255, 255]}
+          - {lower: [0, 50, 150], upper: [15, 255, 255]}
+        min_pixels: 200
+      very_relaxed:
+        ranges:
+          - {lower: [140, 30, 120], upper: [180, 255, 255]}
+          - {lower: [0, 30, 120], upper: [20, 255, 255]}
+        min_pixels: 50
+  
+  # Morphological operations
+  kernel_size: 3
+  apply_opening: true
+  apply_closing: true
+  
+  # Contour filtering
+  aspect_ratio:
+    min: 0.125  # 1:8 ratio
+    max: 8.0    # 8:1 ratio
+  solidity_min: 0.2  # Minimum shape solidity
+  
+  # Confidence calculation
+  confidence:
+    area_factor: 0.001  # area * factor for confidence
+    max_confidence: 1.0
+
+control:
+  # Following behavior
+  target_area: 5000  # Desired object area in pixels
+  area_tolerance: 1000
+  
+  # Speed control
+  base_speed: 0.3
+  max_speed: 0.5
+  min_speed: 0.1
+  
+  # Steering control  
+  steering_gain: 0.8
+  max_steering: 1.0
+  
+  # Detection timeout
+  detection_timeout: 2.0  # seconds
+  
+  # Safety
+  obstacle_distance_threshold: 0.3  # meters
+  
+# Camera Parameters (adjust based on your Jetson Nano camera)
+camera:
+  width: 640
+  height: 480
+  fps: 30
+  
+  # Image processing
+  image_width: 640
+  image_height: 480
+  blur_kernel_size: 5
+  
+  # Debug settings
+  publish_debug_images: false
+  log_detection_details: true
+
 # Obstacle Detection Parameters
 obstacle_detection:
   distance_threshold: 0.5    # meters
@@ -47,12 +230,6 @@ control:
     ki_angular: 0.0
     kd_angular: 0.0
 
-# Camera Parameters (adjust based on your Jetson Nano camera)
-camera:
-  width: 640
-  height: 480
-  fps: 30
-  
 # Debug and Visualization
 debug:
   publish_debug_images: true
