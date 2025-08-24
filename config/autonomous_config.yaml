@@ -1,0 +1,59 @@
+# Autonomous Object-Following Robot Configuration
+
+# Vehicle Configuration
+vehicle_name: "duckiebot"
+
+# Object Detection Parameters
+object_detection:
+  target_object: "red_ball"  # Options: red_ball, blue_ball, green_ball, yellow_duckie
+  min_area: 1000             # Minimum object area in pixels
+  max_area: 15000            # Maximum object area in pixels
+  
+  # HSV Color ranges for different objects
+  color_ranges:
+    red_ball:
+      lower: [0, 100, 100]
+      upper: [10, 255, 255]
+    blue_ball:
+      lower: [100, 100, 100]
+      upper: [130, 255, 255]
+    green_ball:
+      lower: [40, 100, 100]
+      upper: [80, 255, 255]
+    yellow_duckie:
+      lower: [20, 100, 100]
+      upper: [30, 255, 255]
+
+# Obstacle Detection Parameters
+obstacle_detection:
+  distance_threshold: 0.5    # meters
+  detection_height_ratio: 0.4 # Portion of image height to check
+  detection_width_ratio: 0.6  # Portion of image width to check
+  edge_density_threshold: 0.1
+
+# Control Parameters
+control:
+  max_linear_speed: 0.4      # m/s
+  max_angular_speed: 2.0     # rad/s
+  target_distance: 1.0       # meters
+  object_timeout: 3.0        # seconds
+  
+  # PID Control Gains
+  pid:
+    kp_linear: 0.5
+    ki_linear: 0.1
+    kd_linear: 0.0
+    kp_angular: 2.0
+    ki_angular: 0.0
+    kd_angular: 0.0
+
+# Camera Parameters (adjust based on your Jetson Nano camera)
+camera:
+  width: 640
+  height: 480
+  fps: 30
+  
+# Debug and Visualization
+debug:
+  publish_debug_images: true
+  log_level: "INFO"  # DEBUG, INFO, WARN, ERROR

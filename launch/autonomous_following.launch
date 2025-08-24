@@ -1,0 +1,74 @@
+<launch>
+    <!-- Vehicle name parameter -->
+    <arg name="veh" default="$(env VEHICLE_NAME)" doc="Name of vehicle. ex: megaman"/>
+    
+    <!-- Target object for following -->
+    <arg name="target_object" default="red_ball" doc="Object to follow: red_ball, blue_ball, green_ball, yellow_duckie"/>
+    
+    <!-- Control parameters -->
+    <arg name="max_linear_speed" default="0.4" doc="Maximum linear speed in m/s"/>
+    <arg name="max_angular_speed" default="2.0" doc="Maximum angular speed in rad/s"/>
+    <arg name="target_distance" default="1.0" doc="Target following distance in meters"/>
+    <arg name="obstacle_avoidance_distance" default="0.5" doc="Distance threshold for obstacle avoidance"/>
+    
+    <!-- Color Object Detection Node -->
+    <node 
+        name="color_object_detection_node" 
+        pkg="duckiebot_autonomous" 
+        type="color_object_detection_node.py" 
+        output="screen">
+        <param name="vehicle_name" value="$(arg veh)"/>
+        <param name="target_object" value="$(arg target_object)"/>
+    </node>
+    
+    <!-- Obstacle Detection Node -->
+    <node 
+        name="obstacle_detection_node" 
+        pkg="duckiebot_autonomous" 
+        type="obstacle_detection_node.py" 
+        output="screen">
+        <param name="vehicle_name" value="$(arg veh)"/>
+        <param name="obstacle_distance_threshold" value="$(arg obstacle_avoidance_distance)"/>
+        <param name="detection_height_ratio" value="0.4"/>
+        <param name="detection_width_ratio" value="0.6"/>
+    </node>
+    
+    <!-- Autonomous Controller Node -->
+    <node 
+        name="autonomous_controller_node" 
+        pkg="duckiebot_autonomous" 
+        type="autonomous_controller_node.py" 
+        output="screen">
+        <param name="vehicle_name" value="$(arg veh)"/>
+        <param name="max_linear_speed" value="$(arg max_linear_speed)"/>
+        <param name="max_angular_speed" value="$(arg max_angular_speed)"/>
+        <param name="target_distance" value="$(arg target_distance)"/>
+        <param name="obstacle_avoidance_distance" value="$(arg obstacle_avoidance_distance)"/>
+        
+        <!-- PID Control gains -->
+        <param name="kp_linear" value="0.5"/>
+        <param name="kp_angular" value="2.0"/>
+        <param name="ki_linear" value="0.1"/>
+        <param name="ki_angular" value="0.0"/>
+    </node>
+    
+    <!-- Optional: Object Following Node (legacy/alternative implementation) -->
+    <!-- Uncomment if you want to use the integrated approach -->
+    <!--
+    <node 
+        name="object_following_node" 
+        pkg="duckiebot_autonomous" 
+        type="object_following_node.py" 
+        output="screen">
+        <param name="vehicle_name" value="$(arg veh)"/>
+        <param name="target_area" value="5000"/>
+        <param name="min_area" value="1000"/>
+        <param name="max_area" value="15000"/>
+        <param name="linear_gain" value="0.5"/>
+        <param name="angular_gain" value="2.0"/>
+        <param name="max_linear_speed" value="$(arg max_linear_speed)"/>
+        <param name="max_angular_speed" value="$(arg max_angular_speed)"/>
+    </node>
+    -->
+    
+</launch>

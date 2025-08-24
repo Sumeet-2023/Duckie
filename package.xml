@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>duckiebot_autonomous</name>
+  <version>1.0.0</version>
+  <description>Autonomous Object-Following Robot with Obstacle Avoidance for Duckiebot</description>
+
+  <!-- Maintainer info -->
+  <maintainer email="sumeet@example.com">Sumeet</maintainer>
+
+  <!-- License -->
+  <license>MIT</license>
+
+  <!-- Build dependencies -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+  <depend>duckietown_msgs</depend>
+
+  <!-- Python dependencies (will be installed via pip if needed) -->
+  <!-- opencv-python, numpy are typically already available in ROS -->
+
+  <export>
+    <!-- Other tools can request additional information be placed here -->
+  </export>
+
+</package>
