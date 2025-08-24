@@ -22,8 +22,10 @@ class ColorObjectDetectionNode:
         # Color ranges for different objects (HSV)
         self.color_ranges = {
             'red_ball': {
-                'lower': np.array([0, 100, 100]),
-                'upper': np.array([10, 255, 255])
+                'lower1': np.array([0, 100, 100]),
+                'upper1': np.array([10, 255, 255]),
+                'lower2': np.array([170, 100, 100]), 
+                'upper2': np.array([180, 255, 255])
             },
             'blue_ball': {
                 'lower': np.array([100, 100, 100]),
@@ -106,8 +108,13 @@ class ColorObjectDetectionNode:
             if self.target_object in self.color_ranges:
                 color_range = self.color_ranges[self.target_object]
                 
-                # Create mask
-                mask = cv2.inRange(hsv, color_range['lower'], color_range['upper'])
+                # Create mask - handle special case for red which spans 0 and 180 in HSV
+                if self.target_object == 'red_ball':
+                    mask1 = cv2.inRange(hsv, color_range['lower1'], color_range['upper1'])
+                    mask2 = cv2.inRange(hsv, color_range['lower2'], color_range['upper2'])
+                    mask = cv2.bitwise_or(mask1, mask2)
+                else:
+                    mask = cv2.inRange(hsv, color_range['lower'], color_range['upper'])
                 
                 # Noise reduction
                 kernel = np.ones((5, 5), np.uint8)
