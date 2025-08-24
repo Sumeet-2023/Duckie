@@ -70,7 +70,7 @@ class AutonomousControllerNode:
             self.obstacle_detection_callback
         )
         
-        self.obstacle_distance_sub = rospy.Subscribe(
+        self.obstacle_distance_sub = rospy.Subscriber(
             f'/{self.vehicle_name}/obstacle_detection/distance',
             Float32,
             self.obstacle_distance_callback
